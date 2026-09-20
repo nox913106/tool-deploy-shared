@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-syntax:
+    name: bash -n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 對所有 .sh 跑語法檢查
+        run: |
+          set -uo pipefail
+          rc=0
+          while IFS= read -r -d '' f; do
+            if bash -n "$f"; then
+              echo "OK   $f"
+            else
+              echo "FAIL $f"
+              rc=1
+            fi
+          done < <(find . -path ./.git -prune -o -name '*.sh' -print0)
+          exit $rc
+
+  loop-kit-integrity:
+    name: loop_kit sha256
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 比對 loop/ 的 sha256
+        run: sha256sum -c .github/loop-kit.sha256
+
+      - name: 確認 loop/ 沒有多出未登記的檔案
+        run: |
+          set -uo pipefail
+          expected=$(cut -d' ' -f3- .github/loop-kit.sha256 | sed 's|^loop/||' | sort)
+          actual=$(cd loop && ls -A | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "loop/ 內容與清單不符"
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
+          echo "loop/ 內容與清單一致"
+
+      - name: 確認腳本執行權限已記入 git
+        run: |
+          set -uo pipefail
+          rc=0
+          for f in loop/loop.sh loop/verify.sh; do
+            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
+            if [ "$mode" != "100755" ]; then
+              echo "FAIL $f mode=$mode（應為 100755）"
+              rc=1
+            else
+              echo "OK   $f mode=100755"
+            fi
+          done
+          exit $rc
