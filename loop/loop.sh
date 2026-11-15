@@ -159,7 +159,8 @@ snapshot_protected() {
             [[ -e "${p%/}" || -L "${p%/}" ]] || continue
             find "${p%/}" \( -type f -o -type l \) -print0
         done
-        for f in "${HERE}/loop.sh" "${HERE}/verify.sh" "$CONF" "${PROJECT_DIR}/DONE.md"; do
+        for f in "${HERE}/loop.sh" "${HERE}/verify.sh" "$CONF" "${PROJECT_DIR}/DONE.md" \
+                 "${PROJECT_DIR}/.verifyignore"; do
             printf '%s\0' "${f#"${PROJECT_DIR}/"}"
         done
     ) | sort -zu | xargs -0 -r sha256sum 2>/dev/null

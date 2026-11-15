@@ -7,6 +7,11 @@
 PROJECT_NAME="my-netops-tool"     # 同時也是 systemd service 名稱
 SERVICE_PORT="8080"
 
+# ── 驗證嚴格度 ──────────────────────────────────────────────
+# 1 = systemd service 未安裝視為 G3 失敗（預設，對應 DONE.md）
+# 0 = 開發階段，service 還沒裝時略過 G3
+REQUIRE_SERVICE=1
+
 # ── 迴圈邊界 ────────────────────────────────────────────────
 # 對應 CLAUDE.md 的「死迴圈自我防護規則」，但這裡是機械強制的，
 # 不依賴 AI 自己遵守 prompt 裡的約定。
