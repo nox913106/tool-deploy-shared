@@ -41,6 +41,18 @@ TIMEOUT_SEC="${TIMEOUT_SEC:-900}"
 AGENT_CMD="${AGENT_CMD:-claude -p}"
 PROTECTED="${PROTECTED_PATHS:-docs/ prompts/ .env DONE.md loop.conf}"
 
+# ── 前置檢查：相依工具（缺任何一個都不准開跑）──────────────────
+need() {
+    local missing="" t
+    for t in "$@"; do
+        command -v "$t" >/dev/null 2>&1 || missing+=" $t"
+    done
+    if [[ -n "$missing" ]]; then
+        echo "✗ 缺少必要工具：${missing# }"
+        exit 2
+    fi
+}
+
 mkdir -p "$(dirname "$STATE_DB")" "$LOG_DIR"
 
 # ── 狀態儲存（SQLite，取代人工維護的文字檔）──────────────────
@@ -77,20 +89,22 @@ SQL
 }
 
 sq() { sqlite3 "$STATE_DB" "$1"; }
+fmt_table() { if command -v column >/dev/null 2>&1; then column -t -s '|'; else cat; fi; }
 now() { date -Iseconds; }
 esc() { echo "$1" | sed "s/'/''/g"; }
 
 # ── 子指令 ──────────────────────────────────────────────────
 case "${1:-}" in
     --status)
-        init_db
+        need sqlite3
+        init_db || { echo "✗ 無法初始化 ${STATE_DB}"; exit 2; }
         echo "── 最近 10 個 run ──"
         sq "SELECT id, substr(goal,1,42), status, attempts, COALESCE(exit_reason,'') \
-            FROM runs ORDER BY id DESC LIMIT 10;" | column -t -s '|'
+            FROM runs ORDER BY id DESC LIMIT 10;" | fmt_table
         echo
         echo "── 未處理的 ticket ──"
         sq "SELECT id, severity, substr(summary,1,60) FROM tickets \
-            WHERE status='open' ORDER BY id DESC LIMIT 10;" | column -t -s '|'
+            WHERE status='open' ORDER BY id DESC LIMIT 10;" | fmt_table
         exit 0
         ;;
     --dry-run)
@@ -101,7 +115,12 @@ case "${1:-}" in
         ;;
 esac
 
-init_db
+need sqlite3 timeout md5sum sha256sum find diff
+if ! (cd "$PROJECT_DIR" && command -v "${AGENT_CMD%% *}" >/dev/null 2>&1); then
+    echo "✗ 找不到 agent 指令：${AGENT_CMD%% *}（見 loop.conf 的 AGENT_CMD）"
+    exit 2
+fi
+init_db || { echo "✗ 無法初始化 ${STATE_DB}"; exit 2; }
 
 # ── 決定這次的目標 ──────────────────────────────────────────
 if [[ "${1:-}" == "--resume" ]]; then
@@ -116,8 +135,12 @@ else
         echo "用法：./loop.sh \"你要達成的目標\""
         exit 1
     fi
-    sq "INSERT INTO runs (goal, started_at) VALUES ('$(esc "$GOAL")', '$(now)');"
-    RUN_ID=$(sq "SELECT last_insert_rowid();")
+    # last_insert_rowid() 以連線為單位，必須和 INSERT 在同一次呼叫內
+    RUN_ID=$(sq "INSERT INTO runs (goal, started_at) VALUES ('$(esc "$GOAL")', '$(now)'); \
+        SELECT last_insert_rowid();")
+    if [[ ! "$RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+        echo "✗ 無法建立 run 紀錄（${STATE_DB}）"; exit 2
+    fi
     START_SEQ=1
 fi
 
@@ -127,21 +150,34 @@ echo " 上限 ${MAX_ATTEMPTS} 次，逾時 ${TIMEOUT_SEC}s"
 echo "════════════════════════════════════════════"
 
 # ── 硬性退出：受保護檔案是否被動過 ───────────────────────────
+# 用內容快照比對，不依賴 git：未追蹤的新檔、已被 commit 的變更、
+# 刪除都看得到。迴圈自身的檔案不論 loop.conf 怎麼設都一併保護。
+snapshot_protected() {
+    (
+        cd "$PROJECT_DIR" || exit 1
+        for p in $PROTECTED; do
+            [[ -e "${p%/}" || -L "${p%/}" ]] || continue
+            find "${p%/}" \( -type f -o -type l \) -print0
+        done
+        for f in "${HERE}/loop.sh" "${HERE}/verify.sh" "$CONF" "${PROJECT_DIR}/DONE.md"; do
+            printf '%s\0' "${f#"${PROJECT_DIR}/"}"
+        done
+    ) | sort -zu | xargs -0 -r sha256sum 2>/dev/null
+}
+
 check_protected() {
-    local changed
-    changed=$(git -C "$PROJECT_DIR" diff --name-only HEAD 2>/dev/null)
-    for p in $PROTECTED; do
-        if echo "$changed" | grep -q "^${p}"; then
-            echo "$p"; return 0
-        fi
-    done
-    return 1
+    local after
+    after=$(snapshot_protected)
+    [[ "$after" == "$PROTECTED_SNAPSHOT" ]] && return 1
+    diff <(echo "$PROTECTED_SNAPSHOT") <(echo "$after") | grep '^[<>]' \
+        | sed -E 's/^[<>] [0-9a-f]+ [ *]//' | sort -u | head -3 | tr '\n' ' ' | sed 's/ $//'
+    return 0
 }
 
 finish() {
     local status="$1" reason="$2"
     sq "UPDATE runs SET status='${status}', ended_at='$(now)', \
-        attempts=${SEQ:-0}, exit_reason='$(esc "$reason")' WHERE id=${RUN_ID};"
+        attempts=${LAST_SEQ:-0}, exit_reason='$(esc "$reason")' WHERE id=${RUN_ID};"
     if [[ "$status" != "passed" ]]; then
         sq "INSERT INTO tickets (run_id, severity, summary, created_at) \
             VALUES (${RUN_ID}, 'high', '$(esc "${reason} :: ${GOAL}")', '$(now)');"
@@ -156,11 +192,14 @@ finish() {
 
 PREV_DIGEST=""
 FEEDBACK=""
+LAST_SEQ=$(( START_SEQ - 1 ))
+PROTECTED_SNAPSHOT=$(snapshot_protected)
 
 # ── 主迴圈 ──────────────────────────────────────────────────
 for (( SEQ=START_SEQ; SEQ<=MAX_ATTEMPTS; SEQ++ )); do
     echo
     echo "── 第 ${SEQ}/${MAX_ATTEMPTS} 次 ──"
+    LAST_SEQ=$SEQ
     LOG="${LOG_DIR}/run${RUN_ID}_attempt${SEQ}.log"
 
     # 組 prompt：目標 + DONE.md + 上一輪的失敗回饋
@@ -186,8 +225,9 @@ ${FEEDBACK}"
 
     # 呼叫 agent
     echo "  → 呼叫 agent…"
-    if ! timeout "${TIMEOUT_SEC}" bash -c "cd '${PROJECT_DIR}' && ${AGENT_CMD} \"\$1\"" _ "$PROMPT" >"$LOG" 2>&1; then
-        rc=$?
+    timeout "${TIMEOUT_SEC}" bash -c "cd '${PROJECT_DIR}' && ${AGENT_CMD} \"\$1\"" _ "$PROMPT" >"$LOG" 2>&1
+    rc=$?
+    if [[ $rc -ne 0 ]]; then
         if [[ $rc -eq 124 ]]; then
             finish "timeout" "第 ${SEQ} 次執行超過 ${TIMEOUT_SEC} 秒"
             exit 3
