@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# setup.sh — 環境統一化腳本 v1.0
+# setup.sh — 環境統一化腳本 v1.1
 # 用途：在目標主機上建立標準化部署環境
 # 使用方式：bash setup.sh [專案名稱]
 # 必須在人工確認 project-context.md 後才能執行
@@ -13,6 +13,16 @@ if [ -z "$PROJECT_NAME" ]; then
     echo "❌ 請提供專案名稱：bash setup.sh [專案名稱]"
     exit 1
 fi
+
+if [[ ! "$PROJECT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "❌ 專案名稱不合法：$PROJECT_NAME"
+    echo "   只能使用英數字、. _ -，且不可包含路徑"
+    exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/audit-log.sh"
 
 PROJECT_DIR="/opt/apps/$PROJECT_NAME"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
@@ -29,11 +39,24 @@ echo "   專案名稱：$PROJECT_NAME"
 echo "   目標目錄：$PROJECT_DIR"
 echo "   執行帳號：$(whoami)"
 echo ""
-read -rp "確認繼續？(yes/no): " CONFIRM
+if ! read -rp "確認繼續？(yes/no): " CONFIRM; then
+    echo ""
+    echo "❌ 無法讀取確認輸入（需在互動式終端機執行）"
+    exit 1
+fi
 if [ "$CONFIRM" != "yes" ]; then
     echo "❌ 已取消"
     exit 0
 fi
+
+# 確認之後的任何失敗都要留下稽核紀錄
+on_exit() {
+    local rc=$?
+    if [ $rc -ne 0 ]; then
+        audit_log "setup" "$PROJECT_NAME" "fail" "exit code $rc" || true
+    fi
+}
+trap on_exit EXIT
 
 # 建立目錄結構
 echo ""
@@ -71,6 +94,8 @@ if [ ! -f "$PROJECT_DIR/claude-progress.txt" ]; then
 EOF
     echo "✅ claude-progress.txt 建立完成"
 fi
+
+audit_log "setup" "$PROJECT_NAME" "success" "目錄結構與虛擬環境建立完成"
 
 echo ""
 echo "=== setup.sh 完成 ==="
