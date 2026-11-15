@@ -28,3 +28,5 @@ AGENT_CMD="claude -p"
 # ── 受保護路徑 ──────────────────────────────────────────────
 # 迴圈偵測到這些路徑被動過，立即硬性退出。
 PROTECTED_PATHS="docs/ prompts/ .env DONE.md loop.conf verify.sh loop.sh"
+# 受保護路徑底下的例外：SYSTEM_STANDARD 要求 AI 更新 docs/STATE.md。
+PROTECTED_EXCEPT="docs/STATE.md"

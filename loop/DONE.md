@@ -13,7 +13,7 @@
 | 專案名稱 | `{project}` |
 | 服務名稱 | `{project}.service` |
 | 服務 Port | `{port}` |
-| 部署路徑 | `/opt/{project}` |
+| 部署路徑 | `/opt/apps/{project}` |
 | 健康端點 | `http://127.0.0.1:{port}/api/v1/health` |
 
 ---
@@ -100,10 +100,10 @@ http://
 |------|------|
 | 嘗試次數達上限 | 預設 3 次（見 `loop.conf` 的 `MAX_ATTEMPTS`） |
 | 連續兩次相同錯誤 | 代表 AI 在原地打轉，換方向也無效 |
-| 觸碰受保護檔案 | `docs/`、`prompts/`、`.env`、`DONE.md` 本身 |
-| deploy-guard 否決 | 安全 agent 攔截，人工未核准前不得繼續 |
+| 觸碰受保護檔案 | `docs/`（`docs/STATE.md` 除外）、`prompts/`、`.env`、`DONE.md` 本身 |
+| deploy-guard 否決 | 安全 agent 攔截（寫入 `.loop/veto`），人工未核准前不得繼續 |
 | 單次執行超時 | 預設 900 秒（見 `loop.conf` 的 `TIMEOUT_SEC`） |
-| 回滾已觸發 | `rollback.sh` 執行過後，迴圈必須停止待人工檢視 |
+| 回滾已觸發 | `rollback.sh` 執行過後（audit.log 出現新的 rollback 紀錄），迴圈必須停止待人工檢視 |
 
 ---
 

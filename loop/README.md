@@ -24,14 +24,14 @@
 
 ```bash
 # 1. 複製到專案根目錄
-cp loop.sh verify.sh /opt/{project}/
-cp loop.conf.example /opt/{project}/loop.conf
-cp DONE.md /opt/{project}/DONE.md
-chmod +x /opt/{project}/{loop.sh,verify.sh}
+cp loop.sh verify.sh /opt/apps/{project}/
+cp loop.conf.example /opt/apps/{project}/loop.conf
+cp DONE.md /opt/apps/{project}/DONE.md
+chmod +x /opt/apps/{project}/{loop.sh,verify.sh}
 
 # 2. 填寫設定
-vi /opt/{project}/loop.conf      # PROJECT_NAME、SERVICE_PORT
-vi /opt/{project}/DONE.md        # 完成條件，這步不可跳過
+vi /opt/apps/{project}/loop.conf      # PROJECT_NAME、SERVICE_PORT
+vi /opt/apps/{project}/DONE.md        # 完成條件，這步不可跳過
 
 # 3. 依賴
 sudo apt install sqlite3 curl
@@ -75,12 +75,16 @@ pip install ruff black pytest
 | 退出碼 | 狀態 | 條件 |
 |--------|------|------|
 | 0 | passed | 全部 gate 通過 |
+| 1 | — | 用法錯誤，或 `--resume` 時沒有未完成的 run |
+| 2 | — | 設定或環境錯誤（缺 DONE.md、loop.conf、必要工具） |
 | 3 | timeout | 單次執行超時 |
 | 4 | blocked | 受保護檔案被修改 |
 | 5 | stuck | 連續兩次相同錯誤 |
 | 6 | exhausted | 嘗試次數用盡 |
+| 7 | vetoed | deploy-guard 否決（`.loop/veto` 存在） |
+| 8 | rolled_back | `rollback.sh` 在迴圈期間被執行 |
 
-每一種非零退出都會自動開立 ticket 進資料庫。
+退出碼 3 到 8 都會自動開立 ticket 進資料庫；1 和 2 發生在 run 建立之前，不開 ticket。
 
 ---
 

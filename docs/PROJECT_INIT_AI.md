@@ -9,10 +9,10 @@
 
 Execute these steps in order before doing anything else:
 
-1. Read `docs/STATE.md` — confirm current stage and known issues
+1. Read `docs/SYSTEM_STANDARD_AI.md` — confirm system-level rules
 2. Read `docs/GUARD.md` — confirm what you MUST NOT do
 3. Read `docs/ROLES.md` — confirm your role and boundaries
-4. Read `SYSTEM_STANDARD_AI.md` — confirm system-level rules
+4. Read `docs/STATE.md` — confirm current stage and known issues
 5. Ask the human: "Which stage are we on? Is the previous stage complete?"
 6. Wait for human confirmation before proceeding
 
@@ -40,7 +40,7 @@ STOP. Report which stage is blocked. DO NOT attempt to complete it yourself.
 ## YOU MUST NOT
 
 - Write any code before all 7 stages are complete
-- Modify any file in `docs/`
+- Modify any file in `docs/` (only exception: `docs/STATE.md`, which you MUST keep updated)
 - Modify any `*_system_prompt.md` in `prompts/`
 - Read or modify `.env`
 - Connect to any production system
@@ -71,9 +71,10 @@ No error code: use `-` as placeholder
 
 ## ERROR CODE FORMAT
 
-Structure: E[module][category][sequence]
-Modules: 10xx=fetch 20xx=llm 30xx=output 40xx=scheduler 50xx=system
-Category: x0xx=connection x1xx=format x2xx=timeout x3xx=permission x9xx=unexpected
+Structure: E + module (1 digit) + category (1 digit) + sequence (2 digits)
+Module (1st digit): 1=fetch 2=llm 3=output 4=scheduler 5=system
+Category (2nd digit): 0=connection 1=format 2=timeout 3=permission 9=unexpected
+Example: E2201 = llm (2) timeout (2), sequence 01
 
 All error codes MUST be defined in `docs/ERROR_CODE.md` before use.
 

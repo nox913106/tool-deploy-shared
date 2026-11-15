@@ -43,7 +43,7 @@ model: claude-sonnet-4-6
 - [ ] 修改 /etc/ 下的任何設定檔（需另行申請）
 - [ ] 停止或重啟 project-context.md 中標記為關鍵的服務（含 Docker container）
 - [ ] 修改 ufw 規則或開放新的防火牆 port
-- [ ] 未在 DEPLOY_STANDARD 允許清單內的套件
+- [ ] 非來自內部 PyPI mirror 的套件（DEPLOY_STANDARD 第 3 節）
 - [ ] 缺少 --health-check 入口
 - [ ] requirements.txt 中有未鎖定版本的套件
 
@@ -65,6 +65,8 @@ model: claude-sonnet-4-6
 ```
 
 有任何 ❌ 就停止並等待使用者確認，不自動繼續。
+若專案使用 loop_kit（專案根目錄有 .loop/ 目錄），同時把結論寫入 `.loop/veto`，
+loop.sh 會立即硬性退出；人工核准後由人工刪除該檔，AI 不得自行刪除。
 
 ## 分析 env-probe 報告時
 

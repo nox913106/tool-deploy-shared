@@ -47,9 +47,10 @@ Fix: [solution]
 
 ## ERROR CODE — YOU MUST FOLLOW
 
-Structure: E[module][category][sequence]
-Modules: 10xx=fetch 20xx=llm 30xx=output 40xx=scheduler 50xx=system
-Category: x0xx=connection x1xx=format x2xx=timeout x3xx=permission x9xx=unexpected
+Structure: E + module (1 digit) + category (1 digit) + sequence (2 digits)
+Module (1st digit): 1=fetch 2=llm 3=output 4=scheduler 5=system
+Category (2nd digit): 0=connection 1=format 2=timeout 3=permission 9=unexpected
+Example: E2201 = llm (2) timeout (2), sequence 01
 
 MUST NOT use any error code not defined in docs/ERROR_CODE.md.
 MUST add new error codes to ERROR_CODE.md before using them.
@@ -94,7 +95,7 @@ Output commit message for human to confirm before committing.
 ## AI COLLABORATION — YOU MUST NOT
 
 - Connect to any production system
-- Modify any file in docs/
+- Modify any file in docs/ (only exception: docs/STATE.md, which you MUST keep updated)
 - Modify any file in prompts/
 - Read or modify .env
 - Skip any stage gate

@@ -1,7 +1,7 @@
 # SYSTEM_STANDARD.md — 跨專案系統規範
 
-> 版本：v0.1
-> 最後更新：2026-06-05
+> 版本：v0.2
+> 最後更新：2026-11-15
 > 適用範圍：所有專案強制繼承，不可覆蓋，不可跳過
 > AI 不得修改本文件
 
@@ -59,7 +59,7 @@ project-root/
 
 範例：
 ```
-2026-06-05 14:32:01+08:00 [ERROR] E2001 | ipam-analyzer | LLM 呼叫逾時 | retry:3
+2026-06-05 14:32:01+08:00 [ERROR] E2201 | ipam-analyzer | LLM 呼叫逾時 | retry:3
 2026-06-05 14:32:05+08:00 [INFO]  -     | scheduler     | 排程觸發完成 | -
 ```
 
@@ -99,10 +99,12 @@ Fix: [解決方式]
 
 ## 三、Error Code 規範
 
-結構：E[模組碼][分類碼][序號]
+結構：E + 模組碼（1 位）+ 分類碼（1 位）+ 序號（2 位），共 4 位數字
 
-模組碼：10xx=抓取 20xx=LLM 30xx=輸出 40xx=排程 50xx=系統
-分類碼：x0xx=連線 x1xx=格式 x2xx=逾時 x3xx=權限 x9xx=未預期
+模組碼（第 1 位）：1=抓取 2=LLM 3=輸出 4=排程 5=系統
+分類碼（第 2 位）：0=連線 1=格式 2=逾時 3=權限 9=未預期
+
+範例：E2201 = LLM（2）逾時（2）的第 01 號錯誤
 
 規則：
 - 每個專案必須建立 docs/ERROR_CODE.md
@@ -172,9 +174,9 @@ Commit message 格式：`[類型] 簡短描述`
 
 所有 AI 工具強制遵守：
 
-- 進入專案前必須讀取：PROJECT_INIT_AI.md → GUARD.md → ROLES.md → STATE.md
+- 進入專案前必須依序讀取：PROJECT_INIT_AI.md → SYSTEM_STANDARD_AI.md → GUARD.md → ROLES.md → STATE.md
 - 不得自行連線生產環境
-- 不得修改 docs/ 下任何文件
+- 不得修改 docs/ 下任何文件（唯一例外：docs/STATE.md，AI 必須依規定更新）
 - 不得修改 prompts/ 下任何 system prompt
 - 不得讀取或修改 .env
 - 遇到不確定情況必須停止並回報，不得猜測繼續
@@ -187,6 +189,7 @@ Commit message 格式：`[類型] 簡短描述`
 | 版本 | 日期 | 更新內容 |
 |------|------|---------|
 | v0.1 | 2026-06-05 | 初版建立 |
+| v0.2 | 2026-11-15 | Error code 結構改為各佔一位數、統一必讀順序、明訂 docs/STATE.md 為 AI 可更新的例外 |
 
 ---
 

@@ -40,6 +40,9 @@ MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-900}"
 AGENT_CMD="${AGENT_CMD:-claude -p}"
 PROTECTED="${PROTECTED_PATHS:-docs/ prompts/ .env DONE.md loop.conf}"
+PROTECTED_EXCEPT="${PROTECTED_EXCEPT-docs/STATE.md}"
+VETO_FILE="${PROJECT_DIR}/.loop/veto"
+AUDIT_FILE="${AUDIT_LOG_DIR:-/opt/apps}/${PROJECT_NAME:-}/logs/audit.log"
 
 # ── 前置檢查：相依工具（缺任何一個都不准開跑）──────────────────
 need() {
@@ -157,7 +160,9 @@ snapshot_protected() {
         cd "$PROJECT_DIR" || exit 1
         for p in $PROTECTED; do
             [[ -e "${p%/}" || -L "${p%/}" ]] || continue
-            find "${p%/}" \( -type f -o -type l \) -print0
+            # shellcheck disable=SC2086
+            find "${p%/}" \( -type f -o -type l \) -print0 \
+                | grep -zvxFf <(printf '%s\n' $PROTECTED_EXCEPT)
         done
         for f in "${HERE}/loop.sh" "${HERE}/verify.sh" "$CONF" "${PROJECT_DIR}/DONE.md" \
                  "${PROJECT_DIR}/.verifyignore"; do
@@ -173,6 +178,23 @@ check_protected() {
     diff <(echo "$PROTECTED_SNAPSHOT") <(echo "$after") | grep '^[<>]' \
         | sed -E 's/^[<>] [0-9a-f]+ [ *]//' | sort -u | head -3 | tr '\n' ' ' | sed 's/ $//'
     return 0
+}
+
+# ── 硬性退出：deploy-guard 否決、回滾已觸發 ───────────────────
+rollback_count() {
+    [[ -n "${PROJECT_NAME:-}" && -f "$AUDIT_FILE" ]] || { echo 0; return; }
+    grep -c '"action":"rollback"' "$AUDIT_FILE" 2>/dev/null || true
+}
+
+check_stop_signals() {
+    if [[ -e "$VETO_FILE" ]]; then
+        finish "vetoed" "deploy-guard 否決，人工核准並刪除 .loop/veto 後才能繼續：$(head -c 200 "$VETO_FILE" | tr '\n' ' ')"
+        exit 7
+    fi
+    if [[ "$(rollback_count)" != "$ROLLBACK_BASELINE" ]]; then
+        finish "rolled_back" "rollback.sh 已被執行，待人工檢視後再重新開始"
+        exit 8
+    fi
 }
 
 finish() {
@@ -195,11 +217,13 @@ PREV_DIGEST=""
 FEEDBACK=""
 LAST_SEQ=$(( START_SEQ - 1 ))
 PROTECTED_SNAPSHOT=$(snapshot_protected)
+ROLLBACK_BASELINE=$(rollback_count)
 
 # ── 主迴圈 ──────────────────────────────────────────────────
 for (( SEQ=START_SEQ; SEQ<=MAX_ATTEMPTS; SEQ++ )); do
     echo
     echo "── 第 ${SEQ}/${MAX_ATTEMPTS} 次 ──"
+    check_stop_signals
     LAST_SEQ=$SEQ
     LOG="${LOG_DIR}/run${RUN_ID}_attempt${SEQ}.log"
 
@@ -210,7 +234,7 @@ for (( SEQ=START_SEQ; SEQ<=MAX_ATTEMPTS; SEQ++ )); do
 你必須讓 ./verify.sh 的所有 gate 通過才算完成。
 
 規則：
-- 不得修改受保護路徑：${PROTECTED}
+- 不得修改受保護路徑：${PROTECTED}${PROTECTED_EXCEPT:+（例外：${PROTECTED_EXCEPT}）}
 - 同一解法最多試 2 次，第 2 次失敗必須換方向
 - 換方向前必須先說明「為什麼之前失敗」
 - 資訊不足時停止並回報，不得猜測繼續"
@@ -241,6 +265,8 @@ ${FEEDBACK}"
         finish "blocked" "受保護檔案被修改：${violated}"
         exit 4
     fi
+
+    check_stop_signals
 
     # 驗證
     echo "  → 驗證…"
